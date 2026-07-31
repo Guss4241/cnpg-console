@@ -1,0 +1,53 @@
+name: Feature request
+description: Suggest an idea or enhancement for cnpg-console
+title: "[feat]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for helping improve cnpg-console! Please describe the problem before the solution.
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Preflight
+      options:
+        - label: I searched existing issues for a similar request.
+          required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / motivation
+      description: What are you trying to do that cnpg-console doesn't let you do today?
+      placeholder: I need to … but currently …
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What would you like to happen? UI, API, config, or workflow change?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other approaches or workarounds you've thought about.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      multiple: true
+      options:
+        - Cluster spec / values editing (clusterspec)
+        - GitHub client / PR flow
+        - ArgoCD sync / finalize
+        - Delegation (team repos, databases/roles)
+        - Volume scaling
+        - Auth / sessions (local, OIDC)
+        - UI (Vue SPA)
+        - Deployment (Docker / Helm / ArgoCD)
+        - Docs
+        - Other
+    validations:
+      required: true

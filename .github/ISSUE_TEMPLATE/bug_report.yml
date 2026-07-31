@@ -1,0 +1,82 @@
+name: Bug report
+description: Report a defect in cnpg-console (failed prepare/finalize, wrong scale/add/delete, crash, UI issue…)
+title: "[bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug report!
+
+        ⚠️ **Do not paste secrets** (GitHub/ArgoCD tokens, session secret,
+        passwords) or full config with inline credentials. Redact them.
+        For security vulnerabilities, follow [SECURITY.md](../security/policy) instead.
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Preflight
+      options:
+        - label: I searched existing issues and this is not a duplicate.
+          required: true
+        - label: This report contains no secrets or sensitive data.
+          required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug and what you expected instead.
+      placeholder: When I click "Scaler le volume" from 50Gi to 80Gi, the PR opens but…
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Minimal steps. Mention whether the cluster is delegated, and redact repo/cluster names if sensitive.
+      placeholder: |
+        1. Open the detail of cluster …
+        2. Add a database / role, or delete one, or scale the volume
+        3. Prepare / Finalize
+        4. See …
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which flow?
+      options:
+        - Cluster list / detail view
+        - Create cluster (prepare → finalize)
+        - Volume scale-up
+        - Add database / role
+        - Delete database / role
+        - Delegation (promotion / team repo)
+        - Auth / session
+        - Other / not sure
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: cnpg-console version
+      description: Output of `GET /version` or the image tag / commit sha.
+      placeholder: e.g. b2e48d7 or ghcr.io/guss4241/cnpg-console:0.1.0
+    validations:
+      required: true
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: How are you running it?
+      options:
+        - Local binary (make run)
+        - Docker image
+        - Helm chart on Kubernetes
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Server logs / browser console output. Automatically formatted as code — no backticks needed.
+      render: shell
