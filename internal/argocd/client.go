@@ -104,11 +104,15 @@ func (c *Client) Get(ctx context.Context, name, refresh string) (AppStatus, erro
 	}, nil
 }
 
-// Sync déclenche une synchronisation (ServerSideApply activé). Best-effort :
-// renvoie le statut après déclenchement.
-func (c *Client) Sync(ctx context.Context, name string) (AppStatus, error) {
+// Sync déclenche une synchronisation (ServerSideApply activé). Si prune est vrai,
+// les ressources orphelines (manifest supprimé du git) sont supprimées du cluster.
+// Best-effort : renvoie le statut après déclenchement.
+func (c *Client) Sync(ctx context.Context, name string, prune bool) (AppStatus, error) {
 	body := map[string]any{
 		"syncOptions": map[string]any{"items": []string{"ServerSideApply=true"}},
+	}
+	if prune {
+		body["prune"] = true
 	}
 	p := "/api/v1/applications/" + name + "/sync"
 	var r appResponse

@@ -134,3 +134,85 @@ func TestInsertEmptyList(t *testing.T) {
 		t.Fatalf("insert sur liste vide raté: %v / %+v\n%s", err, cs, out)
 	}
 }
+
+func TestParseAndCompareStorage(t *testing.T) {
+	if _, err := ParseStorage("20"); err == nil {
+		t.Errorf("20 sans unité aurait dû être rejeté")
+	}
+	if cmp, _ := CompareStorage("80Gi", "50Gi"); cmp != 1 {
+		t.Errorf("80Gi > 50Gi attendu (1), obtenu %d", cmp)
+	}
+	if cmp, _ := CompareStorage("50Gi", "50Gi"); cmp != 0 {
+		t.Errorf("50Gi == 50Gi attendu (0), obtenu %d", cmp)
+	}
+	// 1024Mi == 1Gi (comparaison inter-unités).
+	if cmp, _ := CompareStorage("1024Mi", "1Gi"); cmp != 0 {
+		t.Errorf("1024Mi == 1Gi attendu (0), obtenu %d", cmp)
+	}
+	if cmp, _ := CompareStorage("40Gi", "50Gi"); cmp != -1 {
+		t.Errorf("40Gi < 50Gi attendu (-1), obtenu %d", cmp)
+	}
+}
+
+func TestEditStorage(t *testing.T) {
+	out, err := EditStorage(sampleValues, "data-pprod", "80Gi")
+	if err != nil {
+		t.Fatalf("edit storage: %v", err)
+	}
+	cs, err := ParseExisting([]byte(out))
+	if err != nil || len(cs) != 1 || cs[0].Storage != "80Gi" {
+		t.Fatalf("storage non mis à jour: %v / %+v\n%s", err, cs, out)
+	}
+	// Le reste de l'entrée est préservé (commentaire IMMUABLE + team + port).
+	if !strings.Contains(out, "# IMMUABLE") || cs[0].Team == nil || cs[0].Port != 5432 {
+		t.Fatalf("édition non chirurgicale:\n%s", out)
+	}
+	if _, err := EditStorage(sampleValues, "absent", "80Gi"); err == nil {
+		t.Errorf("cluster absent aurait dû être rejeté")
+	}
+}
+
+func TestAddTeamBlock(t *testing.T) {
+	// Entrée SANS délégation.
+	src := "clusters:\n" +
+		"  - name: solo\n    instances: 1\n    storage: 10Gi\n    port: 5432\n    database: solo\n    owner: solo_app\n" +
+		"edge:\n  nlb:\n    internal: true\n"
+	team := Team{RepoURL: "git@github.com:Consoneo/pg-solo.git", RepoRevision: "main"}
+	out, err := AddTeamBlock(src, "solo", team)
+	if err != nil {
+		t.Fatalf("add team: %v", err)
+	}
+	cs, err := ParseExisting([]byte(out))
+	if err != nil || len(cs) != 1 || cs[0].Team == nil || cs[0].Team.RepoURL != team.RepoURL {
+		t.Fatalf("team block non ajouté: %v / %+v\n%s", err, cs, out)
+	}
+	if cs[0].Team.RepoPath != "manifests" || cs[0].Team.RepoRevision != "main" {
+		t.Fatalf("valeurs team incorrectes: %+v", cs[0].Team)
+	}
+	// La clé top-level edge: est préservée après le bloc inséré.
+	if strings.Index(out, "team:") > strings.Index(out, "edge:") {
+		t.Fatalf("team inséré après edge: — frontière ratée\n%s", out)
+	}
+	// Déjà délégué → erreur.
+	if _, err := AddTeamBlock(sampleValues, "data-pprod", team); err == nil {
+		t.Errorf("cluster déjà délégué aurait dû être rejeté")
+	}
+}
+
+func TestParseManifests(t *testing.T) {
+	doc := "apiVersion: postgresql.cnpg.io/v1\nkind: Database\nmetadata:\n  name: reports\n  namespace: pg-x\n" +
+		"spec:\n  cluster:\n    name: x\n  name: reports_db\n  owner: reports_app\n  ensure: present\n" +
+		"---\n" +
+		"apiVersion: postgresql.cnpg.io/v1\nkind: DatabaseRole\nmetadata:\n  name: reports-app\n  namespace: pg-x\n" +
+		"spec:\n  cluster:\n    name: x\n  name: reports_app\n  login: true\n"
+	ms := ParseManifests([]byte(doc))
+	if len(ms) != 2 {
+		t.Fatalf("attendu 2 manifests, obtenu %d: %+v", len(ms), ms)
+	}
+	if ms[0].Kind != "Database" || ms[0].Name != "reports_db" || ms[0].Owner != "reports_app" || ms[0].Cluster != "x" {
+		t.Fatalf("Database mal parsé: %+v", ms[0])
+	}
+	if ms[1].Kind != "DatabaseRole" || ms[1].Name != "reports_app" || !ms[1].Login {
+		t.Fatalf("DatabaseRole mal parsé: %+v", ms[1])
+	}
+}

@@ -118,9 +118,14 @@ func (s *Server) handlePrepare(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	apps := []string{s.cfg.ArgoCD.ClustersApp}
+	if delegatedApp != "" {
+		apps = append(apps, delegatedApp)
+	}
 	tok := s.signToken(finalizePayload{
-		Cluster: c.Name, InfraRepo: g.InfraRepo, InfraPR: pr.Number,
-		TeamRepo: teamRepoURL, DelegatedApp: delegatedApp,
+		Cluster: c.Name, Action: "create",
+		PRs:  []prRef{{Repo: g.InfraRepo, Number: pr.Number}},
+		Apps: apps,
 	})
 	steps := []string{
 		fmt.Sprintf("Relire et merger la PR : %s", pr.HTMLURL),
@@ -150,8 +155,11 @@ func (s *Server) ensureTeamRepo(ctx context.Context, name, cluster string) (gith
 	}
 	var repo github.Repo
 	if exists {
-		// On récupère la branche par défaut via un fichier connu (README auto).
-		repo = github.Repo{HTMLURL: fmt.Sprintf("https://github.com/%s/%s", s.cfg.GitHub.Owner, name), DefaultBranch: "master"}
+		// Récupère la branche par défaut réelle du repo existant.
+		repo, err = s.gh.GetRepo(ctx, name)
+		if err != nil {
+			return github.Repo{}, err
+		}
 	} else {
 		repo, err = s.gh.CreateOrgRepo(ctx, name, "Bases & users du cluster PostgreSQL "+cluster+" (délégation GitOps)")
 		if err != nil {
@@ -163,9 +171,11 @@ func (s *Server) ensureTeamRepo(ctx context.Context, name, cluster string) (gith
 		br = "master"
 	}
 	// Contenu de départ (best-effort : ignore les conflits si déjà présents).
+	exDB := "# EXEMPLE (non synchronisé). Copier dans manifests/ et adapter.\n" + renderDatabase(cluster, "exemple", "exemple_app")
+	exRole := "# EXEMPLE (non synchronisé). Copier dans manifests/ et adapter.\n" + renderDatabaseRole(cluster, "exemple_app", true, "exemple-app-pw")
 	_ = s.gh.PutFile(ctx, name, "manifests/.gitkeep", br, []byte(""), "", "cnpg-console: dossier des manifests")
-	_ = s.gh.PutFile(ctx, name, "examples/database.yaml", br, []byte(exampleDatabase(cluster)), "", "cnpg-console: exemple Database")
-	_ = s.gh.PutFile(ctx, name, "examples/databaserole.yaml", br, []byte(exampleRole(cluster)), "", "cnpg-console: exemple DatabaseRole")
+	_ = s.gh.PutFile(ctx, name, "examples/database.yaml", br, []byte(exDB), "", "cnpg-console: exemple Database")
+	_ = s.gh.PutFile(ctx, name, "examples/databaserole.yaml", br, []byte(exRole), "", "cnpg-console: exemple DatabaseRole")
 	return repo, nil
 }
 
@@ -189,17 +199,3 @@ func prBody(c clusterspec.Cluster, suffix string) string {
 	return b.String()
 }
 
-func exampleDatabase(cluster string) string {
-	return "# EXEMPLE (non synchronisé). Copier dans manifests/ et adapter.\n" +
-		"apiVersion: postgresql.cnpg.io/v1\nkind: Database\n" +
-		"metadata: { name: exemple, namespace: pg-" + cluster + " }\n" +
-		"spec:\n  cluster: " + cluster + "\n  name: exemple\n  owner: exemple_app\n"
-}
-
-func exampleRole(cluster string) string {
-	return "# EXEMPLE (non synchronisé). Copier dans manifests/ et adapter.\n" +
-		"apiVersion: postgresql.cnpg.io/v1\nkind: DatabaseRole\n" +
-		"metadata: { name: exemple-app, namespace: pg-" + cluster + " }\n" +
-		"spec:\n  cluster: " + cluster + "\n  name: exemple_app\n  login: true\n" +
-		"  passwordSecret: { name: exemple-app-pw }\n"
-}

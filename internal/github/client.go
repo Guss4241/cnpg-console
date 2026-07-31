@@ -81,6 +81,38 @@ func (c *Client) GetFile(ctx context.Context, repo, path, ref string) (content [
 	return dec, r.SHA, nil
 }
 
+// DirEntry décrit une entrée d'un répertoire (API contents sur un dossier).
+type DirEntry struct {
+	Name string `json:"name"`
+	Path string `json:"path"`
+	Type string `json:"type"` // "file" | "dir"
+	SHA  string `json:"sha"`
+}
+
+// ListDir liste le contenu d'un répertoire sur une ref. Un dossier absent (404)
+// renvoie une liste vide sans erreur (le repo d'équipe peut n'avoir aucun manifest).
+func (c *Client) ListDir(ctx context.Context, repo, path, ref string) ([]DirEntry, error) {
+	var entries []DirEntry
+	p := fmt.Sprintf("/repos/%s/%s/contents/%s?ref=%s", c.owner, repo, path, ref)
+	if err := c.do(ctx, http.MethodGet, p, nil, &entries); err != nil {
+		if bytes.Contains([]byte(err.Error()), []byte("HTTP 404")) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return entries, nil
+}
+
+// GetRepo renvoie les métadonnées d'un repo (URL + branche par défaut).
+func (c *Client) GetRepo(ctx context.Context, name string) (Repo, error) {
+	var r Repo
+	p := fmt.Sprintf("/repos/%s/%s", c.owner, name)
+	if err := c.do(ctx, http.MethodGet, p, nil, &r); err != nil {
+		return Repo{}, err
+	}
+	return r, nil
+}
+
 func cleanB64(s string) string {
 	// L'API insère des sauts de ligne dans le base64.
 	out := make([]byte, 0, len(s))
@@ -125,6 +157,17 @@ func (c *Client) PutFile(ctx context.Context, repo, path, branch string, content
 	}
 	p := fmt.Sprintf("/repos/%s/%s/contents/%s", c.owner, repo, path)
 	return c.do(ctx, http.MethodPut, p, body, nil)
+}
+
+// DeleteFile supprime un fichier sur une branche (sha du blob requis).
+func (c *Client) DeleteFile(ctx context.Context, repo, path, branch, sha, message string) error {
+	body := map[string]any{
+		"message": message,
+		"branch":  branch,
+		"sha":     sha,
+	}
+	p := fmt.Sprintf("/repos/%s/%s/contents/%s", c.owner, repo, path)
+	return c.do(ctx, http.MethodDelete, p, body, nil)
 }
 
 // PR décrit une pull request ouverte.

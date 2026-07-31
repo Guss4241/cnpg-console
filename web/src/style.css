@@ -28,6 +28,8 @@ input, select { width: 100%; padding: 9px 10px; background: #0d0f14; border: 1px
 .check input { width: auto; }
 button { margin-top: 16px; padding: 10px 16px; background: var(--accent); color: #04122b; border: 0; border-radius: 7px; font-weight: 600; cursor: pointer; font-size: 14px; }
 button.secondary { background: #222833; color: var(--text); border: 1px solid var(--border); }
+button.danger { color: var(--err); border-color: #5a2a2a; }
+button.danger:hover:not(:disabled) { background: #2a1618; }
 button:disabled { opacity: .5; cursor: not-allowed; }
 a { color: var(--accent); }
 .muted { color: var(--muted); font-size: 13px; }
@@ -39,3 +41,5 @@ code { background: #0d0f14; padding: 1px 5px; border-radius: 4px; font-size: 12p
 ul { padding-left: 18px; }
 .topbar { display: flex; justify-content: space-between; align-items: center; }
 .pill { font-size: 11px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); }
+tr.clickable { cursor: pointer; }
+tr.clickable:hover td { background: #1e222b; }

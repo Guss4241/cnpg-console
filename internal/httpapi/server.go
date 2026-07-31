@@ -76,6 +76,12 @@ func (s *Server) Handler() http.Handler {
 	prot := func(pattern string, h http.HandlerFunc) { mux.Handle(pattern, s.requireAuth(h)) }
 	prot("GET /api/auth/me", s.handleMe)
 	prot("GET /api/clusters", s.handleClusters)
+	prot("GET /api/clusters/{name}", s.handleClusterDetail)
+	prot("POST /api/clusters/{name}/scale", s.handleScale)
+	prot("POST /api/clusters/{name}/databases", s.handleAddDatabase)
+	prot("POST /api/clusters/{name}/roles", s.handleAddRole)
+	prot("DELETE /api/clusters/{name}/databases/{db}", s.handleDeleteDatabase)
+	prot("DELETE /api/clusters/{name}/roles/{role}", s.handleDeleteRole)
 	prot("POST /api/prepare", s.handlePrepare)
 	prot("POST /api/finalize", s.handleFinalize)
 

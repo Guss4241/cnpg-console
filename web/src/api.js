@@ -33,6 +33,12 @@ export const api = {
   },
   async logout() { await req('POST', '/api/auth/logout'); csrfToken = '' },
   async clusters() { return req('GET', '/api/clusters') },
+  async cluster(name) { return req('GET', '/api/clusters/' + encodeURIComponent(name)) },
   async prepare(payload) { return req('POST', '/api/prepare', payload) },
+  async scale(name, storage) { return req('POST', '/api/clusters/' + encodeURIComponent(name) + '/scale', { storage }) },
+  async addDatabase(name, payload) { return req('POST', '/api/clusters/' + encodeURIComponent(name) + '/databases', payload) },
+  async addRole(name, payload) { return req('POST', '/api/clusters/' + encodeURIComponent(name) + '/roles', payload) },
+  async deleteDatabase(name, db) { return req('DELETE', '/api/clusters/' + encodeURIComponent(name) + '/databases/' + encodeURIComponent(db)) },
+  async deleteRole(name, role) { return req('DELETE', '/api/clusters/' + encodeURIComponent(name) + '/roles/' + encodeURIComponent(role)) },
   async finalize(token) { return req('POST', '/api/finalize', { token }) },
 }

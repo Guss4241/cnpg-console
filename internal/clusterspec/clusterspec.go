@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -240,6 +241,247 @@ func Insert(fileText, entry string) (string, error) {
 	newLines = append(newLines, entryLines...)
 	newLines = append(newLines, lines[insertAt:]...)
 	return strings.Join(newLines, "\n"), nil
+}
+
+// ValidatePGIdent valide un identifiant PostgreSQL (base/owner/rôle).
+func ValidatePGIdent(s, field string) error {
+	if !rePGIdent.MatchString(s) || len(s) > 63 {
+		return fmt.Errorf("%s %q invalide : identifiant PostgreSQL (a-z0-9_, commence par lettre/_)", field, s)
+	}
+	return nil
+}
+
+// FindByName renvoie le cluster nommé et true s'il existe dans la liste.
+func FindByName(existing []Cluster, name string) (Cluster, bool) {
+	for _, c := range existing {
+		if c.Name == name {
+			return c, true
+		}
+	}
+	return Cluster{}, false
+}
+
+// --- storage (scale-up) ---
+
+var reStorageParse = regexp.MustCompile(`^([1-9][0-9]*)(Mi|Gi|Ti)$`)
+
+// ParseStorage convertit une quantité k8s (Mi/Gi/Ti) en octets.
+func ParseStorage(s string) (int64, error) {
+	m := reStorageParse.FindStringSubmatch(strings.TrimSpace(s))
+	if m == nil {
+		return 0, fmt.Errorf("storage %q invalide : quantité k8s attendue (ex. 50Gi)", s)
+	}
+	n, err := strconv.ParseInt(m[1], 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("storage %q : %w", s, err)
+	}
+	var unit int64
+	switch m[2] {
+	case "Mi":
+		unit = 1 << 20
+	case "Gi":
+		unit = 1 << 30
+	case "Ti":
+		unit = 1 << 40
+	}
+	return n * unit, nil
+}
+
+// CompareStorage renvoie -1, 0 ou 1 selon que a est plus petit, égal ou plus
+// grand que b.
+func CompareStorage(a, b string) (int, error) {
+	av, err := ParseStorage(a)
+	if err != nil {
+		return 0, err
+	}
+	bv, err := ParseStorage(b)
+	if err != nil {
+		return 0, err
+	}
+	switch {
+	case av < bv:
+		return -1, nil
+	case av > bv:
+		return 1, nil
+	default:
+		return 0, nil
+	}
+}
+
+// --- édition in-place d'une entrée existante (textuelle) ---
+
+// blockRange localise l'entrée `- name: <clusterName>` et renvoie l'index de sa
+// ligne `name:` et l'index de fin de bloc (exclusif, après recul sur les
+// commentaires/lignes vides de fin). Une entrée = sa ligne `- name:` (indent 2)
+// et ses champs (indent >= 4) jusqu'au prochain frère `- ` / clé top-level.
+func blockRange(lines []string, clusterName string) (nameIdx, endIdx int, err error) {
+	nameIdx = -1
+	for i, ln := range lines {
+		t := strings.TrimSpace(ln)
+		if !strings.HasPrefix(t, "- ") {
+			continue
+		}
+		rest := strings.TrimSpace(strings.TrimPrefix(t, "-"))
+		if !strings.HasPrefix(rest, "name:") {
+			continue
+		}
+		val := strings.TrimSpace(strings.TrimPrefix(rest, "name:"))
+		if i := strings.IndexByte(val, '#'); i >= 0 {
+			val = strings.TrimSpace(val[:i])
+		}
+		if val == clusterName {
+			nameIdx = i
+			break
+		}
+	}
+	if nameIdx < 0 {
+		return -1, -1, fmt.Errorf("cluster %q introuvable dans le fichier de values", clusterName)
+	}
+	// Fin de bloc : 1re ligne non-vide/non-commentaire avec indentation < 4.
+	end := len(lines)
+	for i := nameIdx + 1; i < len(lines); i++ {
+		ln := lines[i]
+		trimmed := strings.TrimSpace(ln)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		if indentOf(ln) < 4 {
+			end = i
+			break
+		}
+	}
+	// Recule au-dessus des commentaires/lignes vides de fin.
+	for end > nameIdx+1 {
+		prev := strings.TrimSpace(lines[end-1])
+		if prev == "" || strings.HasPrefix(prev, "#") {
+			end--
+			continue
+		}
+		break
+	}
+	return nameIdx, end, nil
+}
+
+func indentOf(ln string) int {
+	n := 0
+	for n < len(ln) && ln[n] == ' ' {
+		n++
+	}
+	return n
+}
+
+// EditStorage remplace la valeur `storage:` de l'entrée du cluster (indent 4),
+// en préservant un éventuel commentaire de fin de ligne et le reste du fichier.
+func EditStorage(fileText, clusterName, newStorage string) (string, error) {
+	lines := strings.Split(fileText, "\n")
+	nameIdx, end, err := blockRange(lines, clusterName)
+	if err != nil {
+		return "", err
+	}
+	for i := nameIdx + 1; i < end; i++ {
+		trimmed := strings.TrimSpace(lines[i])
+		if indentOf(lines[i]) == 4 && strings.HasPrefix(trimmed, "storage:") {
+			comment := ""
+			if j := strings.IndexByte(lines[i], '#'); j >= 0 {
+				comment = "  " + strings.TrimSpace(lines[i][j:])
+			}
+			lines[i] = "    storage: " + newStorage + comment
+			return strings.Join(lines, "\n"), nil
+		}
+	}
+	return "", fmt.Errorf("champ `storage:` introuvable dans l'entrée du cluster %q", clusterName)
+}
+
+// RenderTeamBlock rend le sous-bloc `team:` (indent 4) à insérer dans une entrée.
+func RenderTeamBlock(t Team) string {
+	rev := t.RepoRevision
+	if rev == "" {
+		rev = "master"
+	}
+	path := t.RepoPath
+	if path == "" {
+		path = "manifests"
+	}
+	var b strings.Builder
+	b.WriteString("    team:\n")
+	fmt.Fprintf(&b, "      repoURL: %s\n", t.RepoURL)
+	fmt.Fprintf(&b, "      repoRevision: %s\n", rev)
+	fmt.Fprintf(&b, "      repoPath: %s\n", path)
+	if t.Group != "" {
+		fmt.Fprintf(&b, "      group: %s\n", t.Group)
+	}
+	return b.String()
+}
+
+// AddTeamBlock ajoute un sous-bloc `team:` à la fin de l'entrée d'un cluster qui
+// n'en a pas (promotion en délégation). Erreur si l'entrée a déjà un `team:`.
+func AddTeamBlock(fileText, clusterName string, team Team) (string, error) {
+	lines := strings.Split(fileText, "\n")
+	nameIdx, end, err := blockRange(lines, clusterName)
+	if err != nil {
+		return "", err
+	}
+	for i := nameIdx + 1; i < end; i++ {
+		if indentOf(lines[i]) == 4 && strings.HasPrefix(strings.TrimSpace(lines[i]), "team:") {
+			return "", fmt.Errorf("le cluster %q est déjà délégué (bloc team: présent)", clusterName)
+		}
+	}
+	blockLines := strings.Split(strings.TrimRight(RenderTeamBlock(team), "\n"), "\n")
+	newLines := append([]string{}, lines[:end]...)
+	newLines = append(newLines, blockLines...)
+	newLines = append(newLines, lines[end:]...)
+	return strings.Join(newLines, "\n"), nil
+}
+
+// --- parsing des manifests CNPG (repo d'équipe) ---
+
+// Manifest décrit un objet Database/DatabaseRole lu dans le repo d'équipe.
+type Manifest struct {
+	Kind    string // Database | DatabaseRole
+	MetaName string
+	Cluster string // spec.cluster.name
+	Name    string // spec.name (nom logique PG)
+	Owner   string // spec.owner (Database)
+	Login   bool   // spec.login (DatabaseRole)
+}
+
+type rawManifest struct {
+	Kind     string `yaml:"kind"`
+	Metadata struct {
+		Name string `yaml:"name"`
+	} `yaml:"metadata"`
+	Spec struct {
+		Cluster struct {
+			Name string `yaml:"name"`
+		} `yaml:"cluster"`
+		Name  string `yaml:"name"`
+		Owner string `yaml:"owner"`
+		Login bool   `yaml:"login"`
+	} `yaml:"spec"`
+}
+
+// ParseManifests découpe un fichier YAML multi-documents et renvoie les objets
+// Database/DatabaseRole reconnus (best-effort : ignore les docs illisibles).
+func ParseManifests(data []byte) []Manifest {
+	var out []Manifest
+	for _, doc := range strings.Split(string(data), "\n---") {
+		doc = strings.TrimSpace(doc)
+		if doc == "" || strings.HasPrefix(doc, "#") && !strings.Contains(doc, "kind:") {
+			continue
+		}
+		var rm rawManifest
+		if err := yaml.Unmarshal([]byte(doc), &rm); err != nil {
+			continue
+		}
+		if rm.Kind != "Database" && rm.Kind != "DatabaseRole" {
+			continue
+		}
+		out = append(out, Manifest{
+			Kind: rm.Kind, MetaName: rm.Metadata.Name, Cluster: rm.Spec.Cluster.Name,
+			Name: rm.Spec.Name, Owner: rm.Spec.Owner, Login: rm.Spec.Login,
+		})
+	}
+	return out
 }
 
 // SortedNames renvoie les noms de clusters triés (pour affichage stable).
