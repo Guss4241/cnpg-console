@@ -1,0 +1,6 @@
+bin/
+node_modules/
+config.yaml
+*.local
+.idea/
+.DS_Store

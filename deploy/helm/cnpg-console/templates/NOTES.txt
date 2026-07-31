@@ -1,0 +1,11 @@
+cnpg-console déployé.
+
+{{- if .Values.ingress.enabled }}
+URL : https://{{ .Values.ingress.host }}
+{{- else }}
+Ingress désactivé — port-forward :
+  kubectl port-forward svc/cnpg-console {{ .Values.service.port }}:{{ .Values.service.port }}
+{{- end }}
+
+Vérifier que le Secret {{ include "cnpg-console.secretName" . }} fournit :
+  CNPG_ADMIN_PASSWORD, CNPG_SESSION_SECRET, CNPG_GITHUB_TOKEN, CNPG_ARGOCD_TOKEN

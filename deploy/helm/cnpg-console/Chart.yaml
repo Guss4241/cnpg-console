@@ -1,0 +1,6 @@
+apiVersion: v2
+name: cnpg-console
+description: UI GitOps de provisioning de clusters PostgreSQL (CloudNativePG)
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

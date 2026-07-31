@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cnpg-console
+  labels:
+    {{- include "cnpg-console.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "cnpg-console.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "cnpg-console.selectorLabels" . | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: cnpg-console
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+      containers:
+        - name: cnpg-console
+          image: {{ include "cnpg-console.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["-config", "/etc/cnpg-console/config.yaml"]
+          env:
+            - name: CNPG_COOKIE_SECURE
+              value: {{ .Values.cookieSecure | quote }}
+          envFrom:
+            - secretRef:
+                name: {{ include "cnpg-console.secretName" . }}
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 5
+            periodSeconds: 15
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - name: config
+              mountPath: /etc/cnpg-console
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: cnpg-console-config

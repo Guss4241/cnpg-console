@@ -1,0 +1,33 @@
+# Exemple de configuration cnpg-console.
+# AUCUN secret ici : uniquement des références à des variables d'environnement
+# (champs `*Env`). Les valeurs réelles sont injectées via l'environnement
+# (Secret k8s / Vault).
+
+server:
+  addr: ":8080"
+
+auth:
+  username: admin
+  passwordEnv: CNPG_ADMIN_PASSWORD   # mot de passe admin (auth locale)
+
+session:
+  secretEnv: CNPG_SESSION_SECRET     # secret HMAC de signature des cookies
+
+github:
+  owner: Consoneo
+  tokenEnv: CNPG_GITHUB_TOKEN         # PAT/App (scope repo) : PR + création de repo
+  infraRepo: helm-cnpg.tool           # repo portant la liste `clusters:`
+  infraBranch: master
+  infraValuesPath: values-consoneotech.yaml
+  teamRepoPrefix: pg-                 # repo d'équipe = pg-<nom du cluster>
+
+cnpg:
+  hostnameSuffix: .pg.consoneo.tech   # <nom>.pg.consoneo.tech
+  portBase: 5432
+
+argocd:
+  server: argo-cd.consoneo.tech
+  tokenEnv: CNPG_ARGOCD_TOKEN         # token d'un compte local ArgoCD (apiKey)
+  insecure: false
+  clustersApp: cnpg-clusters          # Application ArgoCD à synchroniser
+  project: it-project
