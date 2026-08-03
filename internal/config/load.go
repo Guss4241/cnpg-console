@@ -18,6 +18,7 @@ const (
 	defaultPortBase       = 5432
 	defaultClustersApp    = "cnpg-clusters"
 	defaultProject        = "it-project"
+	defaultArgoNamespace  = "argocd"
 )
 
 // Load lit le YAML, applique les défauts, résout les secrets (fail-fast pour
@@ -73,6 +74,9 @@ func applyDefaults(c *Config) {
 	}
 	if c.ArgoCD.Project == "" {
 		c.ArgoCD.Project = defaultProject
+	}
+	if c.ArgoCD.Namespace == "" {
+		c.ArgoCD.Namespace = defaultArgoNamespace
 	}
 }
 

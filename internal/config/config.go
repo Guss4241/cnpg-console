@@ -59,6 +59,7 @@ type ArgoCDConfig struct {
 	Insecure    bool   `yaml:"insecure"`
 	ClustersApp string `yaml:"clustersApp"` // ex. cnpg-clusters
 	Project     string `yaml:"project"`     // ex. it-project
+	Namespace   string `yaml:"namespace"`   // ns où tournent les Application ArgoCD (ex. argocd) — utilisé au bootstrap
 
 	Token string `yaml:"-"`
 }

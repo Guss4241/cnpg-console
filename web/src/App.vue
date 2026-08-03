@@ -7,8 +7,13 @@ const booting = ref(true)
 const loginForm = reactive({ username: 'admin', password: '' })
 const loginErr = ref('')
 
-const state = reactive({ clusters: [], nextPort: null, hostnameSuffix: '', infraRepo: '' })
+const state = reactive({ clusters: [], nextPort: null, hostnameSuffix: '', infraRepo: '', infraReady: true })
 const loadErr = ref('')
+
+// Bootstrap du repo d'infra (quand infraReady === false).
+const bootstrapBusy = ref(false)
+const bootstrapErr = ref('')
+const bootstrapResult = ref(null)
 
 const form = reactive({ name: '', instances: 1, storage: '20Gi', database: '', owner: '', delegate: true })
 const busy = ref(false)
@@ -53,9 +58,18 @@ async function loadClusters() {
     state.nextPort = d.nextPort
     state.hostnameSuffix = d.hostnameSuffix
     state.infraRepo = d.infraRepo
+    state.infraReady = d.infraReady !== false
   } catch (e) { loadErr.value = e.message }
 }
 async function refreshList() { listBusy.value = true; try { await loadClusters() } finally { listBusy.value = false } }
+
+async function doBootstrap() {
+  if (!confirm(`Initialiser le repo d'infra « ${state.infraRepo} » ?\n\nCela CRÉE le repo et y pose l'umbrella chart helm-cnpg + l'app-of-apps ArgoCD. Refusé si le repo existe déjà.`)) return
+  bootstrapErr.value = ''; bootstrapResult.value = null; bootstrapBusy.value = true
+  try { bootstrapResult.value = await api.bootstrap(); await loadClusters() }
+  catch (e) { bootstrapErr.value = e.message }
+  finally { bootstrapBusy.value = false }
+}
 
 // Aide : dérive des noms PG en underscore depuis le nom de cluster.
 function suggestFromName() {
@@ -188,6 +202,26 @@ onMounted(boot)
 
       <!-- ============ VUE LISTE + CRÉATION ============ -->
       <template v-if="!selected">
+
+        <!-- Repo d'infra non initialisé → bouton d'init -->
+        <template v-if="state.infraReady === false">
+          <h2>Repo d'infra</h2>
+          <div class="panel">
+            <p>Le repo <code>{{ state.infraRepo }}</code> n'est pas initialisé.</p>
+            <p class="muted">L'initialisation crée le repo puis y pose un <b>umbrella chart helm-cnpg générique</b> (namespaces, Cluster CNPG, délégation, proxy edge) + l'<b>app-of-apps ArgoCD</b> (opérateur + clusters). Les futures PR de création de cluster iront sur ce repo.</p>
+            <button :disabled="bootstrapBusy" @click="doBootstrap">{{ bootstrapBusy ? 'Initialisation…' : 'Initialiser le repo d\'infra' }}</button>
+            <div v-if="bootstrapErr" class="err">{{ bootstrapErr }}</div>
+          </div>
+          <div v-if="bootstrapResult" class="panel">
+            <h2 style="margin-top:0" class="ok">Repo initialisé ✔</h2>
+            <p>Repo : <a :href="bootstrapResult.repoUrl" target="_blank">{{ bootstrapResult.repo }}</a> · branche <code>{{ bootstrapResult.branch }}</code> · {{ bootstrapResult.files.length }} fichiers</p>
+            <h2>Étapes</h2>
+            <ul><li v-for="(s,i) in bootstrapResult.nextSteps" :key="i">{{ s }}</li></ul>
+          </div>
+        </template>
+
+        <!-- Repo prêt → liste + création -->
+        <template v-else>
         <h2>Clusters existants — repo <code>{{ state.infraRepo }}</code></h2>
         <div class="panel">
           <div style="display:flex;justify-content:flex-end">
@@ -267,6 +301,7 @@ onMounted(boot)
           <p v-for="(a,i) in finalized.apps" :key="i">App <code>{{ a.name }}</code> : sync={{ a.sync || '—' }} health={{ a.health || '—' }}</p>
           <ul><li v-for="(n,i) in finalized.notes" :key="i">{{ n }}</li></ul>
         </div>
+        </template>
       </template>
 
       <!-- ============ VUE DÉTAIL D'UN CLUSTER ============ -->

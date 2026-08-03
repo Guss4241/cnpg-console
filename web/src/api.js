@@ -33,6 +33,7 @@ export const api = {
   },
   async logout() { await req('POST', '/api/auth/logout'); csrfToken = '' },
   async clusters() { return req('GET', '/api/clusters') },
+  async bootstrap() { return req('POST', '/api/bootstrap') },
   async cluster(name) { return req('GET', '/api/clusters/' + encodeURIComponent(name)) },
   async prepare(payload) { return req('POST', '/api/prepare', payload) },
   async scale(name, storage) { return req('POST', '/api/clusters/' + encodeURIComponent(name) + '/scale', { storage }) },
