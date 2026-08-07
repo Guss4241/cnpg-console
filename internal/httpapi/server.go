@@ -85,6 +85,8 @@ func (s *Server) Handler() http.Handler {
 	prot("DELETE /api/clusters/{name}/roles/{role}", s.handleDeleteRole)
 	prot("POST /api/prepare", s.handlePrepare)
 	prot("POST /api/finalize", s.handleFinalize)
+	prot("GET /api/kube/contexts", s.handleKubeContexts)
+	prot("POST /api/kube/secret", s.handleCreateSecret)
 
 	if s.web != nil {
 		mux.Handle("/", s.web)

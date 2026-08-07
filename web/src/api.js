@@ -42,4 +42,6 @@ export const api = {
   async deleteDatabase(name, db) { return req('DELETE', '/api/clusters/' + encodeURIComponent(name) + '/databases/' + encodeURIComponent(db)) },
   async deleteRole(name, role) { return req('DELETE', '/api/clusters/' + encodeURIComponent(name) + '/roles/' + encodeURIComponent(role)) },
   async finalize(token) { return req('POST', '/api/finalize', { token }) },
+  async kubeContexts() { return req('GET', '/api/kube/contexts') },
+  async createSecret(payload) { return req('POST', '/api/kube/secret', payload) },
 }

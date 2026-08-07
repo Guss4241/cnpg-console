@@ -12,6 +12,7 @@ type Config struct {
 	GitHub  GitHubConfig  `yaml:"github"`
 	CNPG    CNPGConfig    `yaml:"cnpg"`
 	ArgoCD  ArgoCDConfig  `yaml:"argocd"`
+	Kube    KubeConfig    `yaml:"kube"`
 }
 
 type ServerConfig struct {
@@ -63,6 +64,18 @@ type ArgoCDConfig struct {
 
 	Token string `yaml:"-"`
 }
+
+// KubeConfig : création assistée du Secret de mot de passe via kubectl (accès k8s
+// local OPTIONNEL). Désactivée par défaut. À n'activer qu'en usage local-admin
+// (kubeconfig multi-contexte). En déploiement in-cluster : laisser à false — l'app
+// ne se voit accorder aucun accès k8s en écriture et l'UI retombe sur la commande
+// kubectl manuelle.
+type KubeConfig struct {
+	Enabled bool `yaml:"enabled"`
+}
+
+// KubeEnabled indique si la création assistée de Secret via kubectl est activée.
+func (c *Config) KubeEnabled() bool { return c.Kube.Enabled }
 
 // TeamRepoName renvoie le nom du repo d'équipe pour un cluster.
 func (g GitHubConfig) TeamRepoName(cluster string) string {

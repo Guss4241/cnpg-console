@@ -38,6 +38,33 @@ const opFinalized = ref(null)
 const opErr = ref('')
 const opBusy = ref(false)
 
+// Création assistée du Secret de mot de passe (accès kubectl local, optionnel).
+const kube = reactive({ available: false, contexts: [], current: '', chosen: '', busy: false, done: null, err: '' })
+function resetKube() { Object.assign(kube, { available: false, contexts: [], current: '', chosen: '', busy: false, done: null, err: '' }) }
+async function loadKubeContexts() {
+  resetKube()
+  try {
+    const r = await api.kubeContexts()
+    kube.available = !!r.available
+    kube.contexts = r.contexts || []
+    kube.current = r.current || ''
+    kube.chosen = r.current || (kube.contexts[0] || '')
+  } catch (e) { /* silencieux : on retombe sur la commande manuelle */ }
+}
+async function doCreateSecret() {
+  kube.err = ''; kube.busy = true
+  try {
+    kube.done = await api.createSecret({
+      context: kube.chosen,
+      namespace: 'pg-' + selected.value,
+      name: opPrepared.value.secret.name,
+      username: opPrepared.value.secret.username,
+      password: opPrepared.value.secret.password,
+    })
+  } catch (e) { kube.err = e.message }
+  finally { kube.busy = false }
+}
+
 async function boot() {
   try { const me = await api.me(); actor.value = me.actor; await loadClusters() } catch { /* non connecté */ }
   booting.value = false
@@ -128,8 +155,11 @@ const scaleInvalid = computed(() => {
 })
 
 async function runOp(fn) {
-  opErr.value = ''; opPrepared.value = null; opFinalized.value = null; opBusy.value = true
-  try { opPrepared.value = await fn() }
+  opErr.value = ''; opPrepared.value = null; opFinalized.value = null; opBusy.value = true; resetKube()
+  try {
+    opPrepared.value = await fn()
+    if (opPrepared.value?.secret) await loadKubeContexts()
+  }
   catch (e) { opErr.value = e.message }
   finally { opBusy.value = false }
 }
@@ -428,10 +458,32 @@ onMounted(boot)
             <!-- Secret affiché UNE seule fois -->
             <div v-if="opPrepared.secret" class="panel" style="border-color:var(--warn);background:#1c1a12">
               <p class="ok" style="margin-top:0">🔑 Mot de passe généré — affiché une seule fois, non committé</p>
-              <p class="muted">User <code>{{ opPrepared.secret.username }}</code> · Secret <code>{{ opPrepared.secret.name }}</code></p>
+              <p class="muted">User <code>{{ opPrepared.secret.username }}</code> · Secret <code>{{ opPrepared.secret.name }}</code> · namespace <code>pg-{{ selected }}</code></p>
               <p>Mot de passe : <code style="user-select:all">{{ opPrepared.secret.password }}</code></p>
-              <p class="muted">Créer le Secret AVANT de finaliser (hors-git) :</p>
-              <pre style="white-space:pre-wrap;background:#0d0f14;padding:10px;border-radius:6px;font-size:12px">{{ opPrepared.secret.kubectl }}</pre>
+
+              <!-- Résultat de la création assistée -->
+              <p v-if="kube.done && kube.done.created" class="ok">✔ {{ kube.done.message }}</p>
+              <p v-else-if="kube.done && kube.done.existed" class="muted">ℹ️ {{ kube.done.message }}</p>
+
+              <!-- Création assistée : choix du contexte kubectl + bouton -->
+              <template v-else-if="kube.available">
+                <p class="muted">Créer le Secret pour toi (hors-git), sur le contexte kubectl :</p>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                  <select v-model="kube.chosen" :disabled="kube.busy">
+                    <option v-for="c in kube.contexts" :key="c" :value="c">{{ c }}{{ c === kube.current ? '  (courant)' : '' }}</option>
+                  </select>
+                  <button :disabled="kube.busy || !kube.chosen" @click="doCreateSecret">Créer le Secret</button>
+                </div>
+                <div v-if="kube.err" class="err" style="margin-top:6px">{{ kube.err }}</div>
+              </template>
+
+              <!-- Repli : kubectl indisponible → commande manuelle -->
+              <p v-else class="muted">kubectl indisponible ici — créer le Secret AVANT de finaliser (hors-git) :</p>
+
+              <details :open="!kube.available && !kube.done" style="margin-top:8px">
+                <summary class="muted" style="cursor:pointer">Commande kubectl manuelle</summary>
+                <pre style="white-space:pre-wrap;background:#0d0f14;padding:10px;border-radius:6px;font-size:12px;margin-top:6px">{{ opPrepared.secret.kubectl }}</pre>
+              </details>
             </div>
 
             <h2>Étapes</h2>

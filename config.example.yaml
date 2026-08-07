@@ -31,3 +31,10 @@ argocd:
   insecure: false
   clustersApp: cnpg-clusters          # Application ArgoCD à synchroniser
   project: it-project
+
+kube:
+  # Création assistée du Secret de mot de passe via kubectl (usage local-admin).
+  # true = l'UI propose de créer le Secret + choix du contexte kubectl.
+  # false (défaut / déploiement in-cluster) = l'app n'a aucun accès k8s,
+  #        l'UI affiche seulement la commande kubectl manuelle.
+  enabled: true

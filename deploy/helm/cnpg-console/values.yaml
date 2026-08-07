@@ -31,6 +31,12 @@ config:
     insecure: false
     clustersApp: cnpg-clusters
     project: it-project
+  kube:
+    # Création assistée du Secret de mot de passe via kubectl (accès k8s local).
+    # DÉSACTIVÉ en déploiement in-cluster : pas de kubeconfig multi-contexte et
+    # aucun accès k8s en écriture accordé à l'app. L'UI retombe sur la commande
+    # kubectl manuelle. À n'activer qu'en usage local-admin.
+    enabled: false
 
 # Secrets injectés en variables d'environnement. Recommandé : `existingSecret`
 # (Vault / External Secrets). `create: true` + `data` = pratique en dev seulement.
